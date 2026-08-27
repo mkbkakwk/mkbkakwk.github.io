@@ -7,6 +7,7 @@ import HeaderTopRow from "@components/layout/HeaderTopRow.astro";
 import SideBar from "@components/layout/SideBar.astro";
 import type { MarkdownHeading } from "astro";
 import FloatingControls from "@/components/controls/FloatingControls.astro";
+import CollapsingBannerController from "@/components/features/CollapsingBannerController.astro";
 import CategoryBar from "@/components/layout/CategoryBar.astro";
 import SidebarColumn from "@/components/layout/SidebarColumn.astro";
 import WallpaperSection from "@/components/layout/WallpaperSection.astro";
@@ -88,6 +89,8 @@ const {
 <HeaderTopRow stickyNavbar={stickyNavbar} navbarWidthFull={navbarWidthFull} />
 
 <WallpaperSection state={banner} backgroundImages={backgroundImages} title={title} bannerPostMeta={bannerPostMeta} />
+
+<CollapsingBannerController />
 
 <!-- Main content -->
 <div class="content-panel absolute w-full z-30 pointer-events-none">

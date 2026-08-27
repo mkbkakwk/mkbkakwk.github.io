@@ -1,0 +1,803 @@
+<script is:inline data-swup-ignore-script>
+(function initCollapsingBannerController() {
+    /*
+     * 开发环境热更新 / Swup 重执行时，
+     * 先拆掉上一版监听器，避免重复 scroll listener。
+     */
+    if (
+        window.__fireflyCollapsingBanner &&
+        typeof window.__fireflyCollapsingBanner.destroy === "function"
+    ) {
+        window.__fireflyCollapsingBanner.destroy();
+    }
+
+    var COLLAPSE_DISTANCE = 360;
+    var COMPACT_VISIBLE_HEIGHT = 64;
+
+    var COMPACT_POST_TITLE_SIZE = 21.6; // 1.35rem
+    var COMPACT_HOME_TITLE_SIZE = 21.6; // 1.35rem
+
+    var desktopQuery = window.matchMedia("(min-width: 1024px)");
+    var frameId = 0;
+
+    // 与 window.scrollY 解耦的 Banner 收缩进度。
+    // 前 360px 滚轮输入只用于收缩 Hero。
+    var collapseOffset = 0;
+
+    var initialBannerHeight = 0;
+    var initialContentTop = 0;
+
+    // Banner 收完后，正文与顶部区域之间保留的小间距。
+    var CONTENT_GAP = 16;
+
+    // 文章页测量值
+    var initialPostTitleSize = 0;
+    var initialPostGap = 0;
+    var postSecondaryHeights = [];
+
+    // 首页测量值
+    var initialHomeTitleSize = 0;
+    var initialHomeTitleMarginBottom = 0;
+    var initialHomeSubtitleHeight = 0;
+    var initialHomeLinksHeight = 0;
+    var initialHomeLinksMarginTop = 0;
+
+    function getElements() {
+        var homeOverlay =
+            document.querySelector(".banner-home-text-overlay");
+
+        var postOverlay =
+            document.querySelector(".banner-post-meta-overlay");
+
+        return {
+            wallpaper:
+                document.getElementById("wallpaper-wrapper"),
+
+            content:
+                document.querySelector(".content-panel"),
+
+            topRow:
+                document.getElementById("top-row"),
+
+            // 首页
+            homeOverlay: homeOverlay,
+
+            homeTitle:
+                homeOverlay
+                    ? homeOverlay.querySelector(".banner-title")
+                    : null,
+
+            homeSubtitle:
+                homeOverlay
+                    ? homeOverlay.querySelector(".banner-subtitle")
+                    : null,
+
+            homeLinks:
+                homeOverlay
+                    ? homeOverlay.querySelector(".banner-links")
+                    : null,
+
+            // 文章
+            postOverlay: postOverlay,
+
+            postContent:
+                postOverlay
+                    ? postOverlay.querySelector(".banner-post-content")
+                    : null,
+
+            postTitle:
+                postOverlay
+                    ? postOverlay.querySelector(".banner-post-title")
+                    : null,
+
+            postSecondary:
+                postOverlay
+                    ? Array.from(
+                        postOverlay.querySelectorAll(
+                            ".banner-post-secondary"
+                        )
+                    )
+                    : [],
+        };
+    }
+
+    function isHomePage() {
+        return document.body.classList.contains("is-home");
+    }
+
+    function getNavbarHeight() {
+        var topRow = document.getElementById("top-row");
+
+        if (!topRow) return 72;
+
+        var height =
+            topRow.getBoundingClientRect().height;
+
+        return height > 0
+            ? height
+            : 72;
+    }
+
+    function isEnabled() {
+        return (
+            desktopQuery.matches &&
+            document.documentElement.getAttribute(
+                "data-wallpaper-mode"
+            ) === "banner"
+        );
+    }
+
+    function clamp(value, min, max) {
+        return Math.min(
+            Math.max(value, min),
+            max
+        );
+    }
+
+    function clearStyles() {
+        var els = getElements();
+
+        if (els.wallpaper) {
+            els.wallpaper.style.removeProperty("position");
+            els.wallpaper.style.removeProperty("top");
+            els.wallpaper.style.removeProperty("height");
+            els.wallpaper.style.removeProperty("z-index");
+            els.wallpaper.style.removeProperty("will-change");
+        }
+
+        if (els.content) {
+            els.content.style.removeProperty("translate");
+            els.content.style.removeProperty("will-change");
+        }
+
+        /*
+         * 首页
+         */
+        if (els.homeOverlay) {
+            els.homeOverlay.style.removeProperty("opacity");
+            els.homeOverlay.style.removeProperty("translate");
+            els.homeOverlay.style.removeProperty("pointer-events");
+            els.homeOverlay.style.removeProperty("will-change");
+        }
+
+        if (els.homeTitle) {
+            els.homeTitle.style.removeProperty("font-size");
+            els.homeTitle.style.removeProperty("margin-bottom");
+            els.homeTitle.style.removeProperty("will-change");
+        }
+
+        if (els.homeSubtitle) {
+            els.homeSubtitle.style.removeProperty("opacity");
+            els.homeSubtitle.style.removeProperty("max-height");
+            els.homeSubtitle.style.removeProperty("overflow");
+            els.homeSubtitle.style.removeProperty("translate");
+            els.homeSubtitle.style.removeProperty("will-change");
+        }
+
+        if (els.homeLinks) {
+            els.homeLinks.style.removeProperty("opacity");
+            els.homeLinks.style.removeProperty("max-height");
+            els.homeLinks.style.removeProperty("overflow");
+            els.homeLinks.style.removeProperty("translate");
+            els.homeLinks.style.removeProperty("margin-top");
+            els.homeLinks.style.removeProperty("pointer-events");
+            els.homeLinks.style.removeProperty("will-change");
+        }
+
+        /*
+         * 文章
+         */
+        if (els.postOverlay) {
+            els.postOverlay.style.removeProperty("translate");
+            els.postOverlay.style.removeProperty("will-change");
+        }
+
+        if (els.postTitle) {
+            els.postTitle.style.removeProperty("font-size");
+            els.postTitle.style.removeProperty("will-change");
+        }
+
+        if (els.postContent) {
+            els.postContent.style.removeProperty("gap");
+        }
+
+        els.postSecondary.forEach(function (element) {
+            element.style.removeProperty("opacity");
+            element.style.removeProperty("max-height");
+            element.style.removeProperty("overflow");
+            element.style.removeProperty("translate");
+            element.style.removeProperty("will-change");
+        });
+    }
+
+    function measure() {
+        clearStyles();
+
+        var els = getElements();
+
+        if (!els.wallpaper) return;
+
+        /*
+         * Banner
+         */
+        initialBannerHeight =
+            els.wallpaper.getBoundingClientRect().height;
+
+        if (els.content) {
+            initialContentTop = parseFloat(
+                window.getComputedStyle(
+                    els.content
+                ).top
+            );
+
+            if (!Number.isFinite(initialContentTop)) {
+                initialContentTop =
+                    initialBannerHeight;
+            }
+        }
+
+        /*
+         * 首页
+         */
+        if (els.homeTitle) {
+            var homeTitleStyle =
+                window.getComputedStyle(els.homeTitle);
+
+            initialHomeTitleSize =
+                parseFloat(homeTitleStyle.fontSize);
+
+            initialHomeTitleMarginBottom =
+                parseFloat(homeTitleStyle.marginBottom);
+
+            if (!Number.isFinite(initialHomeTitleMarginBottom)) {
+                initialHomeTitleMarginBottom = 0;
+            }
+        }
+
+        if (els.homeSubtitle) {
+            initialHomeSubtitleHeight =
+                els.homeSubtitle
+                    .getBoundingClientRect()
+                    .height;
+        }
+
+        if (els.homeLinks) {
+            var homeLinksStyle =
+                window.getComputedStyle(els.homeLinks);
+
+            initialHomeLinksHeight =
+                els.homeLinks
+                    .getBoundingClientRect()
+                    .height;
+
+            initialHomeLinksMarginTop =
+                parseFloat(homeLinksStyle.marginTop);
+
+            if (!Number.isFinite(initialHomeLinksMarginTop)) {
+                initialHomeLinksMarginTop = 0;
+            }
+        }
+
+        /*
+         * 文章
+         */
+        if (els.postTitle) {
+            initialPostTitleSize =
+                parseFloat(
+                    window.getComputedStyle(
+                        els.postTitle
+                    ).fontSize
+                );
+        }
+
+        if (els.postContent) {
+            initialPostGap =
+                parseFloat(
+                    window.getComputedStyle(
+                        els.postContent
+                    ).rowGap
+                );
+
+            if (!Number.isFinite(initialPostGap)) {
+                initialPostGap = 12;
+            }
+        }
+
+        postSecondaryHeights =
+            els.postSecondary.map(function (element) {
+                return element
+                    .getBoundingClientRect()
+                    .height;
+            });
+    }
+
+    /*
+     * 首页：
+     *
+     * 大：
+     *     下一栈
+     * 人生没有主分支
+     *     GitHub
+     *
+     * ↓
+     *
+     * 小：
+     *     下一栈
+     */
+    function renderHomeOverlay(progress, navbarHeight) {
+        var els = getElements();
+
+        if (!els.homeOverlay) {
+            return;
+        }
+
+        /*
+         * 首页和文章页采用不同策略。
+         *
+         * 首页 Navbar 本身已经有“下一栈”，
+         * 因此 Banner 收缩后不再保留第二个站点标题。
+         *
+         * 更重要的是：
+         * 不修改 subtitle / links 的 max-height，
+         * 不干预 Typewriter 自己产生的 DOM 和高度。
+         */
+
+        /*
+         * 前 8% 的滚动保持 Hero 完整。
+         *
+         * 8% ～ 55%：
+         * 标题、副标题、打字机、GitHub 整体一起淡出。
+         */
+        var fadeProgress = clamp(
+            (progress - 0.08) / 0.47,
+            0,
+            1
+        );
+
+        var opacity =
+            1 - fadeProgress;
+
+        els.homeOverlay.style.opacity =
+            opacity.toFixed(3);
+
+        /*
+         * 轻微向上移动，让消失过程不像直接透明掉。
+         *
+         * 这个位移仍然完全绑定 scroll progress，
+         * 没有任何固定动画时间。
+         */
+        els.homeOverlay.style.translate =
+            "0 " +
+            (-18 * fadeProgress).toFixed(2) +
+            "px";
+
+        els.homeOverlay.style.pointerEvents =
+            fadeProgress >= 0.95
+                ? "none"
+                : "auto";
+
+        els.homeOverlay.style.willChange =
+            "opacity, translate";
+    }
+
+    function renderPostOverlay(progress, navbarHeight) {
+        var els = getElements();
+
+        if (
+            !els.postOverlay ||
+            !els.postTitle ||
+            !els.postContent
+        ) {
+            return;
+        }
+
+        var detailProgress = clamp(
+            (progress - 0.10) / 0.50,
+            0,
+            1
+        );
+
+        var titleSize =
+            initialPostTitleSize +
+            (
+                COMPACT_POST_TITLE_SIZE -
+                initialPostTitleSize
+            ) * progress;
+
+        els.postTitle.style.fontSize =
+            titleSize.toFixed(2) + "px";
+
+        els.postTitle.style.willChange =
+            "font-size";
+
+        var currentGap =
+            initialPostGap *
+            (1 - detailProgress);
+
+        els.postContent.style.gap =
+            currentGap.toFixed(2) + "px";
+
+        els.postSecondary.forEach(
+            function (element, index) {
+                var initialHeight =
+                    postSecondaryHeights[index] || 0;
+
+                var remaining =
+                    1 - detailProgress;
+
+                element.style.opacity =
+                    remaining.toFixed(3);
+
+                element.style.maxHeight =
+                    (
+                        initialHeight *
+                        remaining
+                    ).toFixed(2) + "px";
+
+                element.style.overflow =
+                    "hidden";
+
+                element.style.translate =
+                    "0 " +
+                    (-8 * detailProgress).toFixed(2) +
+                    "px";
+
+                element.style.willChange =
+                    "opacity, max-height, translate";
+            }
+        );
+
+        var overlayOffset =
+            navbarHeight *
+            0.5 *
+            progress;
+
+        els.postOverlay.style.translate =
+            "0 " +
+            overlayOffset.toFixed(2) +
+            "px";
+
+        els.postOverlay.style.willChange =
+            "translate";
+    }
+
+    function render() {
+        frameId = 0;
+
+        var els = getElements();
+
+        if (!els.wallpaper || !isEnabled()) {
+            clearStyles();
+            return;
+        }
+
+        if (!initialBannerHeight) {
+            measure();
+
+            els = getElements();
+
+            if (!els.wallpaper) return;
+        }
+
+        var progress = clamp(
+            collapseOffset / COLLAPSE_DISTANCE,
+            0,
+            1
+        );
+
+        var navbarHeight =
+            getNavbarHeight();
+
+        var compactHeight =
+            isHomePage()
+                ? navbarHeight
+                : navbarHeight + COMPACT_VISIBLE_HEIGHT;
+
+        var currentHeight =
+            initialBannerHeight +
+            (
+                compactHeight -
+                initialBannerHeight
+            ) * progress;
+
+        /*
+         * Banner 使用 360px 滚动距离完成加速压缩，
+         * 正文同步补偿这部分视觉距离。
+         *
+         * 不修改 top，只使用 translate，
+         * 因此不会让布局变化反向修改 scrollY。
+         */
+        if (els.content) {
+            var compactContentTop =
+                compactHeight +
+                CONTENT_GAP;
+
+            var contentTranslate =
+                (
+                    compactContentTop -
+                    initialContentTop
+                ) * progress;
+
+            els.content.style.translate =
+                "0 " +
+                contentTranslate.toFixed(2) +
+                "px";
+
+            els.content.style.willChange =
+                "translate";
+        }
+
+        /*
+         * 已验证稳定的 Banner 高度模型。
+         */
+        els.wallpaper.style.position =
+            "fixed";
+
+        els.wallpaper.style.top =
+            "0";
+
+        els.wallpaper.style.height =
+            currentHeight.toFixed(2) +
+            "px";
+
+        els.wallpaper.style.zIndex =
+            progress >= 1
+                ? "40"
+                : "10";
+
+        els.wallpaper.style.willChange =
+            "height";
+
+        /*
+         * 首页和文章页分别处理自己的 Overlay。
+         */
+        if (isHomePage()) {
+            renderHomeOverlay(
+                progress,
+                navbarHeight
+            );
+        } else {
+            renderPostOverlay(
+                progress,
+                navbarHeight
+            );
+        }
+    }
+
+    function normalizeWheelDelta(event) {
+        var delta = event.deltaY;
+
+        // DOM_DELTA_LINE
+        if (event.deltaMode === 1) {
+            delta *= 16;
+        }
+
+        // DOM_DELTA_PAGE
+        if (event.deltaMode === 2) {
+            delta *= window.innerHeight;
+        }
+
+        return delta;
+    }
+
+    function onWheel(event) {
+        if (!isEnabled()) return;
+
+        var delta = normalizeWheelDelta(event);
+
+        if (!delta) return;
+
+        /*
+         * 向下：
+         * Banner 还没有收完时，优先消费滚轮输入。
+         * document 不滚，所以不存在短页面 scrollY 回弹问题。
+         */
+        if (
+            delta > 0 &&
+            collapseOffset < COLLAPSE_DISTANCE
+        ) {
+            event.preventDefault();
+
+            var remaining =
+                COLLAPSE_DISTANCE -
+                collapseOffset;
+
+            var consumed =
+                Math.min(delta, remaining);
+
+            collapseOffset += consumed;
+
+            requestRender();
+
+            /*
+             * 一次很大的触控板滑动可能直接超过剩余收缩距离。
+             * 多出来的部分继续用于正常页面滚动，
+             * 避免产生明显的“卡一下”。
+             */
+            var leftover =
+                delta - consumed;
+
+            if (leftover > 0) {
+                requestAnimationFrame(function () {
+                    window.scrollBy({
+                        top: leftover,
+                        left: 0,
+                        behavior: "auto"
+                    });
+                });
+            }
+
+            return;
+        }
+
+        /*
+         * 向上：
+         *
+         * 正文先正常滚回页面顶部。
+         * 只有 document 已经回到 top=0 后，
+         * 继续向上滚才重新展开 Banner。
+         */
+        if (
+            delta < 0 &&
+            window.scrollY <= 0 &&
+            collapseOffset > 0
+        ) {
+            event.preventDefault();
+
+            collapseOffset =
+                Math.max(
+                    0,
+                    collapseOffset + delta
+                );
+
+            requestRender();
+        }
+    }
+
+    function onScroll() {
+        /*
+         * 如果用户通过滚动条、键盘等方式绕过 wheel
+         * 直接让页面发生真实滚动，
+         * Banner 必须保持完全收起。
+         */
+        if (
+            isEnabled() &&
+            window.scrollY > 0 &&
+            collapseOffset < COLLAPSE_DISTANCE
+        ) {
+            collapseOffset =
+                COLLAPSE_DISTANCE;
+
+            requestRender();
+        }
+    }
+
+    function handlePageLoad() {
+        /*
+         * 新页面默认从展开状态开始。
+         * 浏览器恢复历史滚动位置时则保持收起。
+         */
+        collapseOffset =
+            window.scrollY > 0
+                ? COLLAPSE_DISTANCE
+                : 0;
+
+        refresh();
+    }
+
+    function requestRender() {
+        if (frameId) return;
+
+        frameId =
+            requestAnimationFrame(render);
+    }
+
+    function refresh() {
+        initialBannerHeight = 0;
+        initialContentTop = 0;
+
+        initialPostTitleSize = 0;
+        initialPostGap = 0;
+        postSecondaryHeights = [];
+
+        initialHomeTitleSize = 0;
+        initialHomeTitleMarginBottom = 0;
+        initialHomeSubtitleHeight = 0;
+        initialHomeLinksHeight = 0;
+        initialHomeLinksMarginTop = 0;
+
+        requestRender();
+    }
+
+    function destroy() {
+        window.removeEventListener(
+            "wheel",
+            onWheel
+        );
+
+        window.removeEventListener(
+            "scroll",
+            onScroll
+        );
+
+        window.removeEventListener(
+            "resize",
+            refresh
+        );
+
+        window.removeEventListener(
+            "wallpaperModeChange",
+            refresh
+        );
+
+        document.removeEventListener(
+            "astro:page-load",
+            handlePageLoad
+        );
+
+        if (desktopQuery.removeEventListener) {
+            desktopQuery.removeEventListener(
+                "change",
+                refresh
+            );
+        }
+
+        if (frameId) {
+            cancelAnimationFrame(frameId);
+            frameId = 0;
+        }
+
+        clearStyles();
+    }
+
+    window.__fireflyCollapsingBanner = {
+        refresh: refresh,
+        destroy: destroy
+    };
+
+    window.addEventListener(
+        "wheel",
+        onWheel,
+        { passive: false }
+    );
+
+    window.addEventListener(
+        "scroll",
+        onScroll,
+        { passive: true }
+    );
+
+    window.addEventListener(
+        "resize",
+        refresh,
+        { passive: true }
+    );
+
+    window.addEventListener(
+        "wallpaperModeChange",
+        refresh
+    );
+
+    document.addEventListener(
+        "astro:page-load",
+        handlePageLoad
+    );
+
+    if (desktopQuery.addEventListener) {
+        desktopQuery.addEventListener(
+            "change",
+            refresh
+        );
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener(
+            "DOMContentLoaded",
+            handlePageLoad,
+            { once: true }
+        );
+    } else {
+        handlePageLoad();
+    }
+})();
+</script>
