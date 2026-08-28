@@ -146,6 +146,7 @@
         }
 
         if (els.content) {
+            els.content.style.removeProperty("top");
             els.content.style.removeProperty("translate");
             els.content.style.removeProperty("will-change");
         }
@@ -504,27 +505,34 @@
          * Banner 使用 360px 滚动距离完成加速压缩，
          * 正文同步补偿这部分视觉距离。
          *
-         * 不修改 top，只使用 translate，
-         * 因此不会让布局变化反向修改 scrollY。
+         * 正文直接更新 top，避免 translate 让整块正文进入
+         * 合成层后导致浏览器文字抗锯齿发生变化、出现轻微模糊。
          */
         if (els.content) {
             var compactContentTop =
                 compactHeight +
                 CONTENT_GAP;
 
-            var contentTranslate =
-                (
-                    compactContentTop -
-                    initialContentTop
-                ) * progress;
+            var currentContentTop =
+                Math.round(
+                    initialContentTop +
+                    (
+                        compactContentTop -
+                        initialContentTop
+                    ) * progress
+                );
 
-            els.content.style.translate =
-                "0 " +
-                contentTranslate.toFixed(2) +
+            els.content.style.top =
+                currentContentTop +
                 "px";
 
-            els.content.style.willChange =
-                "translate";
+            els.content.style.removeProperty(
+                "translate"
+            );
+
+            els.content.style.removeProperty(
+                "will-change"
+            );
         }
 
         /*
