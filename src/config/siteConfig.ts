@@ -55,7 +55,6 @@ export const siteConfig: SiteConfig = {
   // 站点关键词
   keywords: [
     "下一栈",
-    "码码桑",
     "计算机",
     "人工智能",
     "机器学习",
