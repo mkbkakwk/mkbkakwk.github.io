@@ -9,7 +9,7 @@
 		"description": null,
 		"language": "Astro",
 		"avatarUrl": "https://avatars.githubusercontent.com/u/108241164?v=4",
-		"license": null
+		"license": "MIT"
 	},
 	"saicaca/fuwari": {
 		"description": "✨A static blog template built with Astro. ",
