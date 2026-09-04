@@ -7,7 +7,7 @@ tags: [Windows, Winget, Scoop, 软件管理]
 category: 工具
 slug: winget-vs-scoop
 pinned: false
-draft: true
+draft: false
 comment: true
 ---
 
