@@ -1,0 +1,268 @@
+---
+title: WinGet 与 Scoop：Windows 装软件的现代姿势
+published: 2026-09-04
+updated: 2026-09-17
+description: WinGet 与 Scoop 使用指南：在 Windows 上搜索、安装、更新和卸载软件。
+tags: [Windows, WinGet, Scoop, 软件管理]
+category: 工具
+slug: winget-vs-scoop
+pinned: false
+draft: false
+comment: true
+---
+
+import {
+  Badge,
+  StepItem,
+  Steps,
+  TabGroup,
+} from '@components/firefly-mdx';
+
+<Badge type="important">WinGet：系统级安装</Badge> <Badge type="tip">Scoop：用户目录</Badge> <Badge type="note">Windows 软件管理</Badge>
+
+## 为什么需要包管理器
+
+在 Windows 上装软件，往往先从搜索开始。结果页里混着广告和下载站，得先认出真正的官网；下载时要避开“高速下载”，安装时还要留意默认勾选项。以后出了新版本，又得各自更新。
+
+偶尔装一个倒也不麻烦，软件多了就不一样了。下载地址散在各处，安装方式各不相同，卸载后还可能留下文件和配置。重装一次系统，这些事又要从头来一遍。
+
+包管理器就是用来收拾这摊事的。搜索、安装、更新和卸载都从同一个入口完成，只不过这个入口在命令行里：
+
+```powershell
+winget install 7zip.7zip
+```
+
+运行后，包管理器会读取软件清单，照着清单里的地址下载安装包，校验无误后再安装。以后更新、卸载，还是用这一套命令。很多软件可以静默安装，不过碰上 UAC、许可协议或安装界面也不奇怪，具体要看安装器怎么写。
+
+命令行还有一个好处：用过的命令可以直接存下来。下次重装系统，照着清单批量装回去，比重新翻官网省事。
+
+这篇只讲两款：微软的 WinGet，以及社区维护的 Scoop。先说清楚两者的区别，再看安装和日常命令，最后给出我的选择。
+
+国内网络环境下，两者遇到的问题不太一样。WinGet 的社区清单索引走微软 CDN，安装包却大多来自软件厂商或项目发布页；Scoop 的 bucket 多在 GitHub，安装包从哪里下载则要看清单。遇到连接问题，我更建议用代理，具体放在后面的 FAQ 里说。
+
+> [!TIP] 先记住一句话
+> 想按 Windows 平常的方式安装软件，先用 WinGet；没有管理员权限，或者想把工具集中放在用户目录，再用 Scoop。
+
+## WinGet 和 Scoop 是什么
+
+### WinGet
+
+<Badge type="important">微软官方</Badge> <Badge type="note">App Installer</Badge> <Badge>系统级安装</Badge>
+
+WinGet 跟着 App Installer 一起分发。Windows 11 通常已经预装，Windows 10 1809 及之后的版本也可能自带。先在终端里试一下 `winget --version`；如果提示找不到命令，再去微软商店安装或更新 App Installer。
+
+拿 7-Zip 来说，执行 `winget install 7zip.7zip` 后，WinGet 会按清单下载安装包，再调用 7-Zip 自己的安装程序。装到哪里、写不写注册表，还是由 7-Zip 决定。
+
+WinGet 的优势是软件多。社区清单加上微软商店，常用软件基本都能找到。至于安装时会不会弹窗、卸载后有没有残留，WinGet 管不了那么细，最终还得看软件自己的安装器。
+
+### Scoop
+
+<Badge type="tip">社区维护</Badge> <Badge type="note">用户目录</Badge> <Badge>便携工具友好</Badge>
+
+Scoop 换了个思路：软件统一放进用户目录，默认位置是 `%USERPROFILE%\scoop\apps`，再用 shim 把命令接到 PATH 上。许多便携软件因此不需要管理员权限，更新和卸载时也很少弹出界面。
+
+不过，装在用户目录不等于完全不改系统。有些清单会运行安装脚本、卸载脚本或前后处理脚本，安装陌生软件前仍要看清楚来源。
+
+它更适合命令行工具，也适合没有管理员权限的电脑。旧版本可以留下，需要时再切回去。短板也很明确：软件全不全要看社区清单，很多 GUI 软件得先添加 bucket，访问 GitHub 也可能受网络影响。
+
+## 安装
+
+<Steps>
+  <StepItem title="确认 WinGet" type="important" icon="code">
+    在 PowerShell 中执行 `winget --version`。能看到版本号就可以直接使用；如果提示找不到命令，再去微软商店安装或更新 App Installer。
+  </StepItem>
+  <StepItem title="安装 Scoop" type="tip" icon="code">
+    在普通 PowerShell 中依次执行 `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser` 和 `irm get.scoop.sh | iex`。
+  </StepItem>
+  <StepItem title="确认安装结果" type="note" icon="book">
+    分别执行 `winget --version` 和 `scoop --version`。更新 WinGet 可用 `winget upgrade Microsoft.AppInstaller`；Scoop 默认装在 `%USERPROFILE%\scoop`。
+  </StepItem>
+</Steps>
+
+<TabGroup labels={["WinGet", "Scoop"]} client:load>
+  ```powershell title="检查 WinGet"
+  winget --version
+  ```
+
+  ```powershell title="安装 Scoop"
+  Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+  irm get.scoop.sh | iex
+  ```
+</TabGroup>
+
+想把 Scoop 装到其他盘，先创建环境变量 `SCOOP`，把值设为目标目录，再执行安装命令。
+
+> [!NOTE] get.scoop.sh 连不上
+> 官方安装脚本放在 GitHub，国内有时连不上。建议配置代理后重试，不要用 `irm | iex` 直接执行来路不明的镜像脚本。需要手动安装时，可以从 Scoop 官方的 [Install 仓库](https://github.com/ScoopInstaller/Install) 下载安装脚本，检查后再运行。
+
+## 日常使用：搜索、安装、更新、卸载
+
+### 搜索
+
+装之前先搜。一是确认源里有没有，二是找到正确的包 ID，免得被同名软件绕进去。
+
+<TabGroup labels={["WinGet", "Scoop"]} client:load>
+  ```powershell
+  winget search 7zip
+  ```
+
+  ```powershell
+  scoop search 7zip
+  ```
+</TabGroup>
+
+下面是 `winget search 7zip` 的部分结果：
+
+| 名称 | ID | 版本 | 匹配 | 源 |
+| --- | --- | --- | --- | --- |
+| 7-Zip | `7zip.7zip` | 26.02 | Moniker: 7zip | winget |
+| NanaZip | `M2Team.NanaZip` | 6.5.1800.0 | Tag: 7zip | winget |
+| 7-Zip ZS | `mcmilk.7zip-zstd` | 26.02-v1.5.7-R2 | Tag: 7zip | winget |
+| 7zip解压缩软件 | `XP8C87R6J42SKH` | Unknown | — | msstore |
+
+版本号会随上游更新，以实际结果为准。
+
+看起来都和 7-Zip 有关，实际上通常要装的是第一行：
+
+- `7zip.7zip` 是 7-Zip 的包 ID，常见格式为“发布者.产品名”。`Moniker: 7zip` 表示清单把 `7zip` 设成了这个包的别名，所以搜索时会命中。
+- NanaZip 和 7-Zip ZS 是基于 7-Zip 源码的第三方版本，匹配列是 `Tag`，只是标签里带了 7zip。它们不是假货，但多数时候你要装的不是这两个。
+- 最后一行来自微软商店，仅看名称还无法判断发布者，需要再查详情：
+
+<TabGroup labels={["WinGet：商店详情", "Scoop：包详情"]} client:load>
+  ```powershell
+  winget show XP8C87R6J42SKH --source msstore
+  ```
+
+  ```powershell
+  scoop info 7zip
+  ```
+</TabGroup>
+
+我一般会核对 Homepage 和发布者。7-Zip 的主页应当指向 `7-zip.org`；商店包则用 `winget show <ID> --source msstore` 查看详情。来源说不清楚的包，不装最省事。
+
+Scoop 只搜索已经添加的 bucket。搜不到，往往不是没有这个软件，而是对应的 bucket 还没加。bucket 里不放安装包，放的是下载地址和安装方法。默认只有偏命令行工具的 `main`；GUI 软件多在 `extras`，多版本清单多在 `versions`。
+
+查看已安装的软件，用 `winget list` 或 `scoop list`；查看 Scoop 中哪些软件可以更新，用 `scoop status`。
+
+### 安装
+
+<TabGroup labels={["WinGet", "Scoop"]} client:load>
+  ```powershell
+  winget install --id Git.Git
+  winget install --id 7zip.7zip
+  ```
+
+  ```powershell
+  scoop install git
+  scoop install 7zip
+  ```
+</TabGroup>
+
+WinGet 常用的两个软件源是 `winget` 和 `msstore`。前者是社区维护的清单，后者是微软商店。不指定来源时，可能会同时搜到两个源里的结果；只想看商店版本，或遇到同名包时，再加 `--source msstore`。
+
+`--id` 不是必需的，直接写 `winget install Git.Git` 也能安装。我习惯把它带上，让 WinGet 只按 ID 查找，不再用名称和别名猜。写脚本时尤其适合这样写。
+
+Scoop 默认只有 `main` bucket。安装 GUI 软件前，通常要先添加 `extras`：
+
+```powershell
+scoop bucket add extras
+scoop install extras/everything
+```
+
+如果提示权限不足，先看具体报错。常见原因包括杀毒软件拦截、目录权限不够，或者清单脚本有额外要求。Scoop 默认按普通用户安装；确实需要全局安装时，再用管理员终端并加上 `--global`。
+
+### 更新
+
+<TabGroup labels={["WinGet", "Scoop"]} client:load>
+  ```powershell
+  winget upgrade
+  winget upgrade --all
+  ```
+
+  ```powershell
+  scoop update
+  scoop update *
+  ```
+</TabGroup>
+
+更新时，两者的区别就很明显了。WinGet 仍会调用清单指定的安装方式，途中可能弹出 UAC、许可协议，也可能被某个安装器卡住。哪一个失败了，就单独重试哪一个。
+
+Scoop 的很多软件只需切换应用目录，通常不会出现安装界面。`scoop update *` 可以更新全部软件，不过少数清单也会执行额外的安装脚本。
+
+> [!NOTE] 有些软件 WinGet 无法判断是否可更新
+> `winget upgrade` 只能列出当前版本能够识别的软件。版本显示为未知时，确认无误后可加 `--include-unknown`；被固定（pin）的包要先检查 pin 设置。`--force` 只是忽略部分非安全性问题，并不能用来接管所有自更新软件。
+
+### 卸载
+
+<TabGroup labels={["WinGet", "Scoop"]} client:load>
+  ```powershell
+  winget uninstall --id Git.Git
+  ```
+
+  ```powershell
+  scoop uninstall git
+  ```
+</TabGroup>
+
+清单中声明为持久化的数据，会放在 `~/scoop/persist/<包名>`。普通卸载会保留这些数据；想一并删除，加上 `-p`：`scoop uninstall git -p`。
+
+## 常用命令
+
+| 操作 | WinGet | Scoop |
+| --- | --- | --- |
+| 搜索 | `winget search <关键词>` | `scoop search <关键词>` |
+| 查看详情 | `winget show <ID>` | `scoop info <包名>` |
+| 安装 | `winget install --id <ID>` | `scoop install <包名>` |
+| 安装（指定桶） | — | `scoop install <桶名>/<包名>` |
+| 列出已装 | `winget list` | `scoop list` |
+| 查看可更新 | `winget upgrade` | `scoop status` |
+| 更新单个 | `winget upgrade --id <ID>` | `scoop update <包名>` |
+| 更新全部 | `winget upgrade --all` | `scoop update *` |
+| 更新自身 | `winget upgrade Microsoft.AppInstaller` | `scoop update` |
+| 卸载 | `winget uninstall --id <ID>` | `scoop uninstall <包名>` |
+| 卸载并清配置 | — | `scoop uninstall <包名> -p` |
+| 添加软件源 | 商店安装 / `winget source add` | `scoop bucket add <桶名>` |
+
+## 怎么选
+
+我的用法很简单：先在 WinGet 里找。它随系统提供，软件也更全。遇到下面这些情况，再换 Scoop。
+
+<Badge type="important">默认：WinGet</Badge> <Badge type="tip">便携工具：Scoop</Badge> <Badge type="note">两者可以共存</Badge>
+
+| 情况 | 更合适的 |
+| --- | --- |
+| 普通装软件，想省事 | WinGet |
+| 公司电脑没有管理员权限 | Scoop |
+| 希望优先使用用户目录和便携式软件 | Scoop |
+| 需要保留或切换已安装版本 | Scoop（配合 `@版本号`、`reset`） |
+| 要装商店或系统级应用 | WinGet（`msstore` 源） |
+
+两者可以一起用。我通常把系统级软件交给 WinGet，把一部分命令行工具交给 Scoop。只要别用两个渠道安装同一个软件，一般不会出问题；否则容易出现两个版本并存、PATH 指向混乱，配置也会散在不同位置。
+
+## FAQ
+
+### 需要管理员权限吗？
+
+WinGet 安装系统级软件时可能弹出 UAC。Scoop 默认装在用户目录，多数时候不需要管理员权限，个别软件和脚本除外。
+
+### Scoop 下载太慢怎么办？
+
+可以先在终端里设置 `http_proxy` 和 `https_proxy`，再运行 Scoop。社区镜像未必一直有人维护，真要使用，先看清楚维护者、仓库和脚本内容，不要直接运行陌生的远程脚本。
+
+### WinGet 下载慢怎么办？
+
+先看命令里显示的下载地址。WinGet 的清单索引走微软 CDN，安装包却可能来自厂商服务器、项目发布页或其他 CDN。下载慢，未必是 WinGet 本身的问题。
+
+### 两个能一起用吗？
+
+可以。注意别让同一个软件在两边各装一份。想换渠道时，先从原来的渠道卸载，再重新安装。
+
+### Scoop 安全吗？
+
+Scoop 会校验安装包的哈希值，对不上就停止安装。不过，哈希一致只能说明下载到的文件与清单相符，不能证明软件本身绝对安全。尽量使用官方维护的 bucket；不熟悉的软件，先用 `scoop info <包名>` 看一下来源。
+
+## 最后
+
+现在装常用软件，我一般先在 WinGet 和 Scoop 里搜。能找到，就直接用命令安装；拿不准包 ID，再用 `winget show` 或 `scoop info` 核对来源。AI 可以帮忙查，但最后还是以实际搜索结果为准。
+
+当然，并不是所有软件都适合这样装。有的没有清单，有的安装器不配合，最后仍得回到浏览器手动处理。不过，大多数常用软件已经能从固定来源安装和更新，日常使用省心不少。
